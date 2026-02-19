@@ -1,67 +1,6 @@
 import numpy as np
 from osgeo import gdal, osr
 
-
-# parser = argparse.ArgumentParser(
-#     description="Convert radar NPZ data to GeoTIFF using radar lat/lon."
-# )
-
-# parser.add_argument(
-#     "npz_path",
-#     type=str,
-#     help="Path to input NPZ file"
-# )
-
-# parser.add_argument(
-#     "radar_lat",
-#     type=float,
-#     help="Radar latitude in degrees"
-# )
-
-# parser.add_argument(
-#     "radar_lon",
-#     type=float,
-#     help="Radar longitude in degrees"
-# )
-
-# args = parser.parse_args()
-
-# npz_path = args.npz_path
-# radar_lat = args.radar_lat
-# radar_lon = args.radar_lon
-
-# #------------example input data for testing:
-# #npz_path = "nf_predKABX20200707_012805_V06.npz"
-# #KABX radar location
-# #radar_lat = 35.149722    # degrees
-# #radar_lon = -106.823889  # degrees
-
-# # ---------------------------
-# # Other parameters
-# # ---------------------------
-# utm_tif = "radar_reflectivity_utm.tif"
-# final_tif = "radar_reflectivity_latlon.tif"
-
-# pixel_size_m = 500.0   # 500 m spacing
-# channel_index = 1      # channel 1 (0-based)
-
-# # ---------------------------
-# # Load data
-# # ---------------------------
-# data = np.load(npz_path)
-# array = data['inputNF'] 
-
-# # Flip vertically (upside down)
-# array = np.flipud(array)
-
-# refl = array[:, :, channel_index].astype(np.float64)
-# ny, nx = refl.shape
-# print(f"ny, nx = {ny, nx}")
-
-# ---------------------------
-# Determine best-fit UTM zone
-# ---------------------------
-
 class Gdal_Writer:
     def __init__(self, radar_lat, radar_lon, pixel_size_m, nx, ny):
         utm_zone = int((radar_lon + 180) / 6) + 1
@@ -114,6 +53,3 @@ class Gdal_Writer:
             creationOptions=["COMPRESS=LZW", "TILED=YES"]
         )
         utm_ds = None
-
-# wt = Gdal_Writer( radar_lat, radar_lon, pixel_size_m, nx, ny)
-# wt.log_geo_tif(final_tif,array)

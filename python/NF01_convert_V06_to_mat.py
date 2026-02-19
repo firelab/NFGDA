@@ -5,6 +5,21 @@ import argparse
 import scipy
 import configparser
 
+# def read_info_from_radar_name(radar_file):
+#     """ Copied from https://github.com/PreciousJatau47/VAD_correction/blob/master/RadarHCAUtils.py
+#     Finds the corresponding hca PPI name given a radar PPI name.
+#     :param radar_file:
+#     :return:
+#     """
+#     radar_name = radar_file[:4]
+#     year = radar_file[4:8]
+#     month = radar_file[8:10]
+#     day = radar_file[10:12]
+#     hh = radar_file[13:15]
+#     mm = radar_file[15:17]
+#     ss = radar_file[17:19]
+#     return radar_name, year, month, day, hh, mm, ss
+
 def ReadSliceElevation(radar, slice_idx):
     """ Copied from https://github.com/PreciousJatau47/VAD_correction/blob/master/RadarHCAUtils.py
     :param radar:
@@ -139,7 +154,7 @@ def convert_v06_to_mat(v06_folder, case_id, mat_folder, i_start, i_end):
                 # exit()
             if np.min(in_parrot):
                 timestamp=np.datetime64(pyart.graph.common.generate_radar_time_sweep(radar_obj,slice_idx))
-                print("Slice idx {} timestamp".format(slice_idx),timestamp)
+                print("slice idx {} timestamp".format(slice_idx),timestamp)
                 break
             print()
         print()
