@@ -12,13 +12,17 @@ varunit_table=VM.varunit_table
 
 config = configparser.ConfigParser()
 config.read("NFGDA.ini")
+radar_id = config["Settings"]["radar_id"]
+radar_lat, radar_lon = list(map(float,config.get("labels", "loc").split(",")))
 export_preds_dir = config["Settings"]["export_preds_dir"]
 evalbox_on = config.getboolean('Settings', 'evalbox_on')
 export_forecast_dir = config["Settings"]["export_forecast_dir"]
 V06_dir = config["Settings"]["V06_dir"]
-radar_id = config["Settings"]["radar_id"]
 custom_start_time = config["Settings"]["custom_start_time"]
 custom_end_time = config["Settings"]["custom_end_time"]
+use_gdal = True
+if use_gdal:
+    from . import nf_gdal
 if len(custom_start_time.split(','))==6:
     custom_start_time = datetime.datetime(*map(int,custom_start_time.split(',')), tzinfo=datetime.timezone.utc)
     custom_end_time = datetime.datetime(*map(int,custom_end_time.split(',')), tzinfo=datetime.timezone.utc)
@@ -29,11 +33,11 @@ else:
 # fig_dir = config["Settings"]["fig_dir"]
 # label_on = config.getboolean('labels', 'label_on')
 # if label_on:
-#     label_loc = list(map(float,config.get("labels", "loc").split(",")))
+    
 #     radar_loc = list(map(float,config.get("labels", "rloc").split(",")))
 #     sitex, sitey = mk.geopoints_to_relative_xy(radar_loc,label_loc)
-
-Cx, Cy = np.meshgrid(np.arange(-100,100.5,0.5),np.arange(-100,100.5,0.5))
+pixel_size_m = 500
+Cx, Cy = np.meshgrid(np.arange(-100,100.5,pixel_size_m/1e3),np.arange(-100,100.5,pixel_size_m/1e3))
 r = np.sqrt(Cx**2+Cy**2)
 rmask = r>=100
 
@@ -88,6 +92,8 @@ class path_struct():
         self.V06_dir = V06_dir
         self.nf_preds_dir = export_preds_dir
         self.nf_forecast_dir = export_forecast_dir
+        if use_gdal:
+            self.gdal_writer = nf_gdal.Gdal_Writer( radar_lat, radar_lon, pixel_size_m, Cx.shape[1], Cx.shape[0])
 
 path_config = path_struct()
 

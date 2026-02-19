@@ -13,6 +13,8 @@ from pathlib import Path
 from . import nf_path
 from .NFGDA_load_config import *
 import pickle
+if use_gdal:
+    from . import nf_gdal
 
 import nexradaws
 aws_int = nexradaws.NexradAwsInterface()
@@ -311,6 +313,8 @@ def nfgda_unit_step(l2_file_0,l2_file_1,process_tag=''):
 
     # scipy.io.savemat(matout, data_dict)
     np.savez(nf_path.get_nf_detection_name(ifn,path_config), **data_dict)
+    if use_gdal:
+        path_config.gdal_writer.log_geo_tif(nf_path.get_nf_detection_name(ifn,path_config,ext='tif'),inputNF)
     nfgda_fig(ifn)
 
 END_GATE = 400
