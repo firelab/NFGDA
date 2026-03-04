@@ -808,7 +808,7 @@ def nfgda_forecast(l2_file_0,l2_file_1,debug=False,suppress_fig=False):
     worker = Prediction_Worker(gps)
     worker.update_velocitys(0)
     tvec = worker.gps[0].timestamp.astype('datetime64[m]')\
-        +np.arange(60,7201,60)*np.timedelta64(1, 's')
+        +np.arange(forecast_step_sec,forecast_period_sec+1,forecast_step_sec)*np.timedelta64(1, 's')
     fig, axs = plt.subplots(1, 1, figsize=(3.3/0.7, 3/0.7),dpi=150)
     pdata = np.ma.masked_where(rmask,data['inputNF'][:,:,1])
     pcz=axs.pcolormesh(Cx,Cy,pdata,cmap=cl.zmap,norm=cl.znorm)
@@ -923,4 +923,6 @@ def nfgda_stochastic_summary(forecasts,l2_file_0,force=False):
         fig.savefig(nf_path.get_nf_s_forecast_name(path_config,valid_time))
         cs.remove()
         data_dict = {"nfproxy": pgf, "timestamp":valid_time}
-        np.savez(nf_path.get_nf_s_forecast_name(path_config,valid_time)[:-3]+'npz', **data_dict)
+        np.savez(nf_path.get_nf_s_forecast_name(path_config,valid_time,ext='npz'), **data_dict)
+        if use_gdal:
+            path_config.gdal_writer.log_geo_tif(nf_path.get_nf_s_forecast_name(path_config,valid_time,ext='tif'),pgf)

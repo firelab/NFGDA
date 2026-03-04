@@ -20,6 +20,8 @@ export_forecast_dir = config["Settings"]["export_forecast_dir"]
 V06_dir = config["Settings"]["V06_dir"]
 custom_start_time = config["Settings"]["custom_start_time"]
 custom_end_time = config["Settings"]["custom_end_time"]
+forecast_step_sec = float(config["Forecast"]["step_sec"])
+forecast_period_sec = float(config["Forecast"]["period_sec"])
 use_gdal = True
 if use_gdal:
     from . import nf_gdal

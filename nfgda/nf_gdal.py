@@ -29,19 +29,27 @@ class Gdal_Writer:
 
     def log_geo_tif(self, fn, array):
         mem_driver = gdal.GetDriverByName("MEM")
-
+        if array.ndim ==3:
+            Nvar = array.shape[2]
+        else:
+            Nvar = 1
         utm_ds = mem_driver.Create(
             "", # No filename needed for MEM driver
             array.shape[1], # nfgda var [y,x,v] in here order for [nx,ny,nz]=[1,0,2]
             array.shape[0], 
-            array.shape[2], 
+            Nvar, 
             gdal.GDT_Float64
         )
         utm_ds.SetGeoTransform(self.geotransform)
         utm_ds.SetProjection(self.utm_wkt)
-        for iv in range(array.shape[-1]):
-            band = utm_ds.GetRasterBand(iv+1) ## band index start from 1
-            band.WriteArray(np.flipud(array[:, :, iv]).astype(np.float64))
+        if Nvar != 1:
+            for iv in range(array.shape[-1]):
+                band = utm_ds.GetRasterBand(iv+1) ## band index start from 1
+                band.WriteArray(np.flipud(array[:, :, iv]).astype(np.float64))
+                band.SetNoDataValue(-9999)
+        else:
+            band = utm_ds.GetRasterBand(1) ## band index start from 1
+            band.WriteArray(np.flipud(array).astype(np.float64))
             band.SetNoDataValue(-9999)
         gdal.Warp(
             fn,
