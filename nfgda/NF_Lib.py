@@ -807,7 +807,11 @@ def nfgda_forecast(l2_file_0,l2_file_1,debug=False,suppress_fig=False):
     gps=[DataGFG(data,data['nfout']),DataGFG(data1,data1['nfout'])]
     worker = Prediction_Worker(gps)
     worker.update_velocitys(0)
-    tvec = worker.gps[0].timestamp.astype('datetime64[m]')\
+
+    st = worker.gps[0].timestamp.astype('datetime64[m]')
+    second_offset = (st.astype(int)*60) % forecast_step_sec
+
+    tvec = st - second_offset*np.timedelta64(1, 's') \
         +np.arange(forecast_step_sec,forecast_period_sec+1,forecast_step_sec)*np.timedelta64(1, 's')
     fig, axs = plt.subplots(1, 1, figsize=(3.3/0.7, 3/0.7),dpi=150)
     pdata = np.ma.masked_where(rmask,data['inputNF'][:,:,1])
@@ -862,7 +866,9 @@ def nfgda_stochastic_summary(forecasts,l2_file_0,force=False):
 
     live_tdx = np.full((len(forecasts),),False)
     tstart = data['timestamp']
-    tnow = tstart.astype('datetime64[m]')+60*np.timedelta64(1, 's')
+    st = tstart.astype('datetime64[m]')
+    second_offset = (st.astype(int)*60) % forecast_step_sec
+    tnow = st +( -second_offset + forecast_step_sec )*np.timedelta64(1, 's')
     forecast_end = tstart
     for tdx,buf in enumerate(forecasts):
         if len(buf)==2:
