@@ -35,7 +35,7 @@ class Gdal_Writer:
             Nvar = 1
         utm_ds = mem_driver.Create(
             "", # No filename needed for MEM driver
-            array.shape[1], # nfgda var [y,x,v] in here order for [nx,ny,nz]=[1,0,2]
+            array.shape[1], # nfgda var [x,y,var] convert to GeoTIFF Raster Image [vertical(NS),horizontal(EW),band] // [0,1,2] --> [1,0,2]
             array.shape[0], 
             Nvar, 
             gdal.GDT_Float64
