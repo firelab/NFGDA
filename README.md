@@ -2,6 +2,56 @@
 
 This repository provides tools and scripts for the **Neuro-Fuzzy Gust Front Detection Algorithm** (NFGDA). Follow the instructions below to set up and run the system.
 
+```mermaid
+graph TD
+    %% Define Styles
+    classDef loop fill:#2b78e4,stroke:#fff,color:#fff;
+    classDef machine fill:#d9ead3,stroke:#6aa84f,color:#274e13;
+
+    subgraph Host [HostDaemon]
+        M[Main 120s loop]:::loop
+    end
+    class Host machine;
+
+    M -->|check_update|AWS[AWS Server]:::machine
+    AWS -->|download_q| DW
+    M <-->|live status| NW
+    M <-->|live status| DFW
+    M <-->|live status| SFW
+
+    subgraph DW [download_worker]
+        direction TB
+        dl[NF_Lib.get_nexrad]:::loop
+    end
+    class DW machine;
+
+    subgraph NW [nfgda_worker]
+        direction TB
+        nf[NF_Lib.nfgda_unit_step]:::loop
+    end
+    class NW machine;
+
+    subgraph DFW [d_forecast_worker]
+        direction TB
+        df[NF_Lib.nfgda_forecast]:::loop
+    end
+    class DFW machine;
+  
+    subgraph SFW [s_forecast_worker]
+        direction TB
+        ss[NF_Lib.nfgda_stochastic_summary]:::loop
+    end
+    class SFW machine;
+
+    dl[NF_Lib.get_nexrad] --> v06[V06_dir]
+    dl[NF_Lib.get_nexrad] --->|nfgda_q| NW
+    nf[NF_Lib.nfgda_unit_step] --> ep[export_preds_dir]
+    nf[NF_Lib.nfgda_unit_step] --->|d_forecast_q| DFW
+    df[NF_Lib.nfgda_forecast] --> efd[export_forecast_dir]
+    df[NF_Lib.nfgda_forecast] --->|s_forecast_q| SFW
+    ss[NF_Lib.nfgda_stochastic_summary] --> esd[export_forecast_summary]
+```
+
 ## Setup Instructions
 
 ### 1. Clone the repository
