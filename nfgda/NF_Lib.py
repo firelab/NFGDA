@@ -522,9 +522,54 @@ class Prediction_Connection:
         self.egp_anchor = np.array(egps.arc_anchors)
         self.motions = np.full(self.igp_anchor.shape,np.nan)
         self.speeds = np.full(self.igp_anchor.shape[0],np.nan)
+        self.timestamp = igps.timestamp
         self.dt = (egps.timestamp - igps.timestamp)/np.timedelta64(60, 's')
         self.make_motion()
         self.copy_motion(igps, egps)
+
+    @classmethod
+    def load(cls, filepath, igps=None, egps=None):
+        """Loads from an NPZ file and reconstructs the class instance."""
+        # Using context manager 'with' to ensure the file is closed properly
+        with np.load(filepath) as archive:
+            # We convert the archive to a standard dict because np.load handles closing lazily
+            data_dict = {key: archive[key] for key in archive.files}
+        obj = cls.__new__(cls)
+        
+        # Restore saved attributes
+        obj.endidx = data_dict['endidx']
+        obj.flip = data_dict['flip']
+        obj.igp_anchor = data_dict['igp_anchor']
+        obj.egp_anchor = data_dict['egp_anchor']
+        obj.motions = data_dict['motions']
+        obj.speeds = data_dict['speeds']
+        obj.dt = data_dict['dt']
+        obj.timestamp = data_dict['timestamp']
+
+        # Optional: Re-link to GPS objects if they are provided during loading
+        if igps is not None and egps is not None:
+            obj.copy_motion(igps, egps)
+            
+        return obj
+
+    def to_dict(self):
+        """Returns a dictionary representation of the object for saving."""
+        return {
+            'endidx': self.endidx,
+            'flip': self.flip,
+            'igp_anchor': self.igp_anchor,
+            'egp_anchor': self.egp_anchor,
+            'motions': self.motions,
+            'speeds': self.speeds,
+            'dt': self.dt,
+            'timestamp' : self.timestamp
+        }
+
+    def save(self, filepath):
+        """Wraps to_dict and saves the data directly to an NPZ file."""
+        np.savez(filepath, **self.to_dict())
+        print(f"Successfully saved to {filepath}")
+
     def make_motion(self):
         for ii, ie in enumerate(self.endidx):
             ep = self.egp_anchor[ie]
@@ -541,11 +586,27 @@ class Prediction_Connection:
             egps.pre_motions[ie] = np.mean(self.motions[self.endidx==ie].reshape(-1,2,egps.n_anchors),axis=0)
             # if np.sum(self.endidx==ie)>1:
             #     print(egps.pre_motions[ie],self.motions[self.endidx==ie].shape,self.flip[self.endidx==ie])
+    def make_forecast(self,t,mode='element'):
+        dt = (t-self.timestamp)/np.timedelta64(60, 's')
+        if mode == 'mean':
+            anchors = self.igp_anchor+np.mean(self.motions,axis=2)[:,:,np.newaxis]*dt
+            tstp = self.timestamp + dt*np.timedelta64(1, 'm')
+        elif mode == 'element':
+            anchors = self.igp_anchor+self.motions*dt
+            tstp = self.timestamp + dt*np.timedelta64(1, 'm')
+        return GFGroups(anchors,tstp)
 
 class Prediction_Worker:
     def __init__(self, gps):
         self.gps = gps
         self.connects = {}
+
+    def save_conn(self, k, filepath):
+        self.connects[k].save(filepath)
+
+    def load_conn(self, k, filepath):
+        self.connects[k] = Prediction_Connection.load(filepath)
+
     def update_velocitys(self, k=None):
         if k is None:
             for ig in range(len(self.gps)-1):
@@ -590,6 +651,7 @@ class Prediction_Worker:
             anchors = self.connects[startf].igp_anchor+self.connects[startf].motions*dt
             tstp = self.gps[startf].timestamp + dt*np.timedelta64(1, 'm')
         return GFGroups(anchors,tstp)
+
 
 def eval_nf(nfloc,evalline,evalbox,gd):
     nfpredict = dilation(nfloc, disk(5))
@@ -808,42 +870,44 @@ def nfgda_forecast(l2_file_0,l2_file_1,debug=False,suppress_fig=False):
     worker = Prediction_Worker(gps)
     worker.update_velocitys(0)
 
-    st = worker.gps[0].timestamp.astype('datetime64[m]')
-    second_offset = (st.astype(int)*60) % forecast_step_sec
+    worker.save_conn(0,nf_path.get_nf_forecast_npz_name(l2_file_0, path_config))
 
-    tvec = st - second_offset*np.timedelta64(1, 's') \
-        +np.arange(forecast_step_sec,forecast_period_sec+1,forecast_step_sec)*np.timedelta64(1, 's')
-    fig, axs = plt.subplots(1, 1, figsize=(3.3/0.7, 3/0.7),dpi=150)
-    pdata = np.ma.masked_where(rmask,data['inputNF'][:,:,1])
-    pcz=axs.pcolormesh(Cx,Cy,pdata,cmap=cl.zmap,norm=cl.znorm)
-    axs.set_xlim(-100,100)
-    axs.set_ylim(-100,100)
-    axs.set_xlabel('x(km)')
-    axs.set_ylabel('y(km)',labelpad=-10)
-    axs.set_aspect('equal')
-    forecast_anchors = []
-    for t in tvec:
-        dt = (t-worker.gps[0].timestamp)/np.timedelta64(60, 's')
-        if worker.connects[0].motions.ndim==3:
-            ende = worker.prediction(0, dt)
-            endm = worker.prediction(0, dt,mode='mean')
-            forecast_anchors.append((ende,endm))
-            if suppress_fig: continue
-            axs.plot(ende.arc_anchors[:,0,:].T,ende.arc_anchors[:,1,:].T,alpha=0.7,color='k')
-            axs.plot(endm.arc_anchors[:,0,:].T,endm.arc_anchors[:,1,:].T,alpha=0.7,color='r')
-        else:
-            forecast_anchors.append((GFGroups(timestamp=t),GFGroups(timestamp=t)))
-            debug and tprint(df_tag+f'{C.RED_B} Prediction dimension != 3 {C.RESET}',worker.connects[0].motions)
-        if suppress_fig: continue
-        fig.suptitle(worker.gps[0].timestamp.astype(datetime.datetime).item().strftime('%Y/%m/%d %H:%M:%S')+'\n'+
-                t.astype(datetime.datetime).strftime('%Y/%m/%d %H:%M:%S')+f' (+{int(dt)} mins)',y=0.97)
-        fig.savefig(nf_path.get_nf_forecast_name(l2_file_0, path_config,t))
-        for ln in axs.lines[:]:
-            ln.remove()
-    plt.close(fig)
-    with open(nf_path.get_nf_forecast_pkl_name(l2_file_0, path_config), "wb") as f:
-        pickle.dump((tvec,forecast_anchors), f)
-    return tvec,forecast_anchors
+    # st = worker.gps[0].timestamp.astype('datetime64[m]')
+    # second_offset = (st.astype(int)*60) % forecast_step_sec
+
+    # tvec = st - second_offset*np.timedelta64(1, 's') \
+    #     +np.arange(forecast_step_sec,forecast_period_sec+1,forecast_step_sec)*np.timedelta64(1, 's')
+    # fig, axs = plt.subplots(1, 1, figsize=(3.3/0.7, 3/0.7),dpi=150)
+    # pdata = np.ma.masked_where(rmask,data['inputNF'][:,:,1])
+    # pcz=axs.pcolormesh(Cx,Cy,pdata,cmap=cl.zmap,norm=cl.znorm)
+    # axs.set_xlim(-100,100)
+    # axs.set_ylim(-100,100)
+    # axs.set_xlabel('x(km)')
+    # axs.set_ylabel('y(km)',labelpad=-10)
+    # axs.set_aspect('equal')
+    # forecast_anchors = []
+    # for t in tvec:
+    #     dt = (t-worker.gps[0].timestamp)/np.timedelta64(60, 's')
+    #     if worker.connects[0].motions.ndim==3:
+    #         ende = worker.prediction(0, dt)
+    #         endm = worker.prediction(0, dt,mode='mean')
+    #         forecast_anchors.append((ende,endm))
+    #         if suppress_fig: continue
+    #         axs.plot(ende.arc_anchors[:,0,:].T,ende.arc_anchors[:,1,:].T,alpha=0.7,color='k')
+    #         axs.plot(endm.arc_anchors[:,0,:].T,endm.arc_anchors[:,1,:].T,alpha=0.7,color='r')
+    #     else:
+    #         forecast_anchors.append((GFGroups(timestamp=t),GFGroups(timestamp=t)))
+    #         debug and tprint(df_tag+f'{C.RED_B} Prediction dimension != 3 {C.RESET}',worker.connects[0].motions)
+    #     if suppress_fig: continue
+    #     fig.suptitle(worker.gps[0].timestamp.astype(datetime.datetime).item().strftime('%Y/%m/%d %H:%M:%S')+'\n'+
+    #             t.astype(datetime.datetime).strftime('%Y/%m/%d %H:%M:%S')+f' (+{int(dt)} mins)',y=0.97)
+    #     fig.savefig(nf_path.get_nf_forecast_name(l2_file_0, path_config,t))
+    #     for ln in axs.lines[:]:
+    #         ln.remove()
+    # plt.close(fig)
+    # with open(nf_path.get_nf_forecast_pkl_name(l2_file_0, path_config), "wb") as f:
+    #     pickle.dump((tvec,forecast_anchors), f)
+    # return tvec,forecast_anchors
 
     # ele_map=[]
     # mean_map=[]
@@ -856,6 +920,23 @@ def nfgda_forecast(l2_file_0,l2_file_1,debug=False,suppress_fig=False):
     #     mean_map.append(end.anchors_to_arcs_map())
     # data_dict = {"ele_map": ele_map, "mean_map": mean_map, "start_timestamps":tvec}
     # np.savez(nf_path.get_nf_forecast_name(l2_file_0, path_config), **data_dict)
+
+def get_forecast(conn, t):
+    if worker.connects[0].motions.ndim==3:
+        ende = worker.prediction(0, dt)
+        endm = worker.prediction(0, dt,mode='mean')
+        forecast_anchors = (ende,endm)
+    else:
+        forecast_anchors = (GFGroups(timestamp=t),GFGroups(timestamp=t))
+        debug and tprint(df_tag+f'{C.RED_B} Prediction dimension != 3 {C.RESET}',worker.connects[0].motions)
+        if conn.motions.ndim==3:
+            ende = conn.make_forecast(0, dt)
+            endm = conn.make_forecast(0, dt,mode='mean')
+            forecast_anchor = (ende,endm)
+        else:
+            forecast_anchor= (GFGroups(timestamp=t),GFGroups(timestamp=t))
+            debug and tprint(df_tag+f'{C.RED_B} Prediction dimension != 3 {C.RESET} ', f'time: {conn.timestamp} motion {conn.motions}')
+    return forecast_anchor
 
 def exp_weight(dt,t_const):
     return np.exp(-dt/t_const)
