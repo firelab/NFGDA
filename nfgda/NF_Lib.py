@@ -871,7 +871,7 @@ def nfgda_forecast(l2_file_0,l2_file_1,debug=False,suppress_fig=False):
     worker.update_velocitys(0)
 
     worker.save_conn(0,nf_path.get_nf_forecast_npz_name(l2_file_0, path_config))
-
+    return worker.connects[0]
     # st = worker.gps[0].timestamp.astype('datetime64[m]')
     # second_offset = (st.astype(int)*60) % forecast_step_sec
 
@@ -922,59 +922,126 @@ def nfgda_forecast(l2_file_0,l2_file_1,debug=False,suppress_fig=False):
     # np.savez(nf_path.get_nf_forecast_name(l2_file_0, path_config), **data_dict)
 
 def get_forecast(conn, t):
-    if worker.connects[0].motions.ndim==3:
-        ende = worker.prediction(0, dt)
-        endm = worker.prediction(0, dt,mode='mean')
-        forecast_anchors = (ende,endm)
+    if conn.motions.ndim==3:
+        ende = conn.make_forecast(t)
+        endm = conn.make_forecast(t,mode='mean')
+        forecast_anchor = (ende,endm)
     else:
-        forecast_anchors = (GFGroups(timestamp=t),GFGroups(timestamp=t))
-        debug and tprint(df_tag+f'{C.RED_B} Prediction dimension != 3 {C.RESET}',worker.connects[0].motions)
-        if conn.motions.ndim==3:
-            ende = conn.make_forecast(0, dt)
-            endm = conn.make_forecast(0, dt,mode='mean')
-            forecast_anchor = (ende,endm)
-        else:
-            forecast_anchor= (GFGroups(timestamp=t),GFGroups(timestamp=t))
-            debug and tprint(df_tag+f'{C.RED_B} Prediction dimension != 3 {C.RESET} ', f'time: {conn.timestamp} motion {conn.motions}')
+        forecast_anchor= (GFGroups(timestamp=t),GFGroups(timestamp=t))
+        debug and tprint(df_tag+f'{C.RED_B} Prediction dimension != 3 {C.RESET} ', f'time: {conn.timestamp} motion {conn.motions}')
     return forecast_anchor
 
 def exp_weight(dt,t_const):
     return np.exp(-dt/t_const)
 
+# def nfgda_stochastic_summary(forecasts,l2_file_0,force=False):
+#     py_path = nf_path.get_nf_detection_name(l2_file_0, path_config)
+#     data = np.load(py_path)
+
+#     live_tdx = np.full((len(forecasts),),False)
+#     tstart = data['timestamp']
+#     st = tstart.astype('datetime64[m]')
+#     second_offset = (st.astype(int)*60) % forecast_step_sec
+#     tnow = st +( -second_offset + forecast_step_sec )*np.timedelta64(1, 's')
+#     forecast_end = tstart
+#     for tdx,buf in enumerate(forecasts):
+#         if len(buf)==2:
+#             if buf[0][0]>tnow and not(force):
+#                 tprint(sf_tag+
+#                     f'{tnow} is out of date. New data {buf[0][0]} available.')
+#                 return
+#             if buf[0][-1]>tnow and buf[0][0]<tnow:
+#                 live_tdx[tdx]=True
+#             forecast_size = buf[0].size
+#             # tprint(sf_tag+f'forecast_size = {forecast_size}')
+#     if np.sum(live_tdx)==0:
+#         tprint(sf_tag+
+#             'No forecast for summary.')
+#         return
+#     else:
+#         summary_tdx = np.where(live_tdx)[0]
+#         tprint(sf_tag+
+#             f'Summary forecasts[{len(summary_tdx)}]:',
+#             *[forecasts[tdx][0][0] for tdx in summary_tdx])
+#     ips=[]
+#     for tdx in summary_tdx:
+#         ips.append(np.where(forecasts[tdx][0]==tnow)[0][0])
+#     ips = np.array(ips,dtype=int)
+#     tline = forecasts[summary_tdx[np.argmin(ips)]][0][np.min(ips):]
+#     fig, axs = plt.subplots(1, 1, figsize=(3.3/0.7, 3/0.7),dpi=150)
+#     pdata = np.ma.masked_where(rmask,data['inputNF'][:,:,1])
+#     pcz=axs.pcolormesh(Cx,Cy,pdata,cmap=cl.zmap,norm=cl.znorm)
+#     axs.set_xlim(-100,100)
+#     axs.set_ylim(-100,100)
+#     axs.set_xlabel('x(km)')
+#     axs.set_ylabel('y(km)',labelpad=-10)
+#     axs.set_aspect('equal')
+#     # for ipdx,tdx in zip(ips,summary_tdx):
+#     #     print(forecasts[tdx][0][ipdx])
+
+#     for ip in range(forecast_size-np.min(ips)):
+#         ps = 0
+#         pgf = np.zeros(Cx.shape)
+#         valid_time = tline[ip]
+#         for ipdx,tdx in zip(ips,summary_tdx):
+#             if (ipdx+ip) >= forecast_size:continue
+#             arcs = forecasts[tdx][1][ipdx+ip]
+#             if valid_time!= forecasts[tdx][0][ipdx+ip]:
+#                 raise ValueError(sf_tag+f'sf time mismatch {valid_time} {forecasts[tdx][0][ipdx+ip]}')
+#             dt = (valid_time-tnow)/np.timedelta64(60, 's')
+#             ele_w = exp_weight(dt,ele_t_const)
+#             mean_w = exp_weight(dt,mean_t_const)
+#             ps += ele_w + mean_w
+#             pgf += ele_w*binary_dilation(arcs[0].anchors_to_arcs_map(), footprint=disk(3)).astype(float)
+#             pgf += mean_w*binary_dilation(arcs[1].anchors_to_arcs_map(), footprint=disk(3)).astype(float)
+#         pgf=pgf/ps*1e2
+#         pgf[rmask] = 0
+        
+#         fig.suptitle(tnow.astype(datetime.datetime).strftime('%Y/%m/%d %H:%M:%S')+'\n'
+#             +valid_time.astype(datetime.datetime).strftime('%Y/%m/%d %H:%M:%S')+f' (+{int(dt)} mins)',y=0.97)
+#         cs = axs.contour(Cx, Cy, pgf, levels=[30],colors='red')
+#         fig.savefig(nf_path.get_nf_s_forecast_name(path_config,valid_time))
+#         cs.remove()
+#         data_dict = {"nfproxy": pgf, "timestamp":valid_time}
+#         np.savez(nf_path.get_nf_s_forecast_name(path_config,valid_time,ext='npz'), **data_dict)
+#         if use_gdal:
+#             path_config.gdal_writer.log_geo_tif(nf_path.get_nf_s_forecast_name(path_config,valid_time,ext='tif'),pgf)
 def nfgda_stochastic_summary(forecasts,l2_file_0,force=False):
     py_path = nf_path.get_nf_detection_name(l2_file_0, path_config)
     data = np.load(py_path)
 
-    live_tdx = np.full((len(forecasts),),False)
+    # live_tdx = np.full((len(forecasts),),False)
     tstart = data['timestamp']
     st = tstart.astype('datetime64[m]')
     second_offset = (st.astype(int)*60) % forecast_step_sec
+    tvec = st - second_offset*np.timedelta64(1, 's') \
+        +np.arange(forecast_step_sec,forecast_period_sec+1,forecast_step_sec)*np.timedelta64(1, 's')
     tnow = st +( -second_offset + forecast_step_sec )*np.timedelta64(1, 's')
-    forecast_end = tstart
-    for tdx,buf in enumerate(forecasts):
-        if len(buf)==2:
-            if buf[0][0]>tnow and not(force):
-                tprint(sf_tag+
-                    f'{tnow} is out of date. New data {buf[0][0]} available.')
-                return
-            if buf[0][-1]>tnow and buf[0][0]<tnow:
-                live_tdx[tdx]=True
-            forecast_size = buf[0].size
-            # tprint(sf_tag+f'forecast_size = {forecast_size}')
-    if np.sum(live_tdx)==0:
-        tprint(sf_tag+
-            'No forecast for summary.')
-        return
-    else:
-        summary_tdx = np.where(live_tdx)[0]
-        tprint(sf_tag+
-            f'Summary forecasts[{len(summary_tdx)}]:',
-            *[forecasts[tdx][0][0] for tdx in summary_tdx])
-    ips=[]
-    for tdx in summary_tdx:
-        ips.append(np.where(forecasts[tdx][0]==tnow)[0][0])
-    ips = np.array(ips,dtype=int)
-    tline = forecasts[summary_tdx[np.argmin(ips)]][0][np.min(ips):]
+    # forecast_end = tstart
+    # for tdx,buf in enumerate(forecasts):
+    #     if len(buf)==2:
+    #         if buf[0][0]>tnow and not(force):
+    #             tprint(sf_tag+
+    #                 f'{tnow} is out of date. New data {buf[0][0]} available.')
+    #             return
+    #         if buf[0][-1]>tnow and buf[0][0]<tnow:
+    #             live_tdx[tdx]=True
+    #         forecast_size = buf[0].size
+    #         # tprint(sf_tag+f'forecast_size = {forecast_size}')
+    # if np.sum(live_tdx)==0:
+    #     tprint(sf_tag+
+    #         'No forecast for summary.')
+    #     return
+    # else:
+    #     summary_tdx = np.where(live_tdx)[0]
+    #     tprint(sf_tag+
+    #         f'Summary forecasts[{len(summary_tdx)}]:',
+    #         *[forecasts[tdx][0][0] for tdx in summary_tdx])
+    # ips=[]
+    # for tdx in summary_tdx:
+    #     ips.append(np.where(forecasts[tdx][0]==tnow)[0][0])
+    # ips = np.array(ips,dtype=int)
+    # tline = forecasts[summary_tdx[np.argmin(ips)]][0][np.min(ips):]
     fig, axs = plt.subplots(1, 1, figsize=(3.3/0.7, 3/0.7),dpi=150)
     pdata = np.ma.masked_where(rmask,data['inputNF'][:,:,1])
     pcz=axs.pcolormesh(Cx,Cy,pdata,cmap=cl.zmap,norm=cl.znorm)
@@ -985,25 +1052,40 @@ def nfgda_stochastic_summary(forecasts,l2_file_0,force=False):
     axs.set_aspect('equal')
     # for ipdx,tdx in zip(ips,summary_tdx):
     #     print(forecasts[tdx][0][ipdx])
-
-    for ip in range(forecast_size-np.min(ips)):
+    for t in tvec:
+        tprint(sf_tag+
+            f'Summary forecasts ', t)
         ps = 0
         pgf = np.zeros(Cx.shape)
-        valid_time = tline[ip]
-        for ipdx,tdx in zip(ips,summary_tdx):
-            if (ipdx+ip) >= forecast_size:continue
-            arcs = forecasts[tdx][1][ipdx+ip]
-            if valid_time!= forecasts[tdx][0][ipdx+ip]:
-                raise ValueError(sf_tag+f'sf time mismatch {valid_time} {forecasts[tdx][0][ipdx+ip]}')
-            dt = (valid_time-tnow)/np.timedelta64(60, 's')
-            ele_w = exp_weight(dt,ele_t_const)
-            mean_w = exp_weight(dt,mean_t_const)
-            ps += ele_w + mean_w
-            pgf += ele_w*binary_dilation(arcs[0].anchors_to_arcs_map(), footprint=disk(3)).astype(float)
-            pgf += mean_w*binary_dilation(arcs[1].anchors_to_arcs_map(), footprint=disk(3)).astype(float)
+        valid_time = t
+
+        
+    # for ip in range(forecast_size-np.min(ips)):
+    #     ps = 0
+    #     pgf = np.zeros(Cx.shape)
+        # valid_time = tline[ip]
+        for iconn in forecasts:
+            if isinstance(iconn, Prediction_Connection):
+            # if (ipdx+ip) >= forecast_size:continue
+            # arcs = forecasts[tdx][1][ipdx+ip]
+            # if valid_time!= forecasts[tdx][0][ipdx+ip]:
+            #     raise ValueError(sf_tag+f'sf time mismatch {valid_time} {forecasts[tdx][0][ipdx+ip]}')
+                # dt = (valid_time-tnow)/np.timedelta64(60, 's')
+                dt = (t-iconn.timestamp)/np.timedelta64(60, 's')
+                if dt < forecast_period_sec/60:
+                    ele_w = exp_weight(dt,ele_t_const)
+                    mean_w = exp_weight(dt,mean_t_const)
+                    arcs = get_forecast(iconn,t)
+                    ps += ele_w + mean_w
+                    pgf += ele_w*binary_dilation(arcs[0].anchors_to_arcs_map(), footprint=disk(3)).astype(float)
+                    pgf += mean_w*binary_dilation(arcs[1].anchors_to_arcs_map(), footprint=disk(3)).astype(float)
+                else:
+                    tprint(sf_tag+
+                    f'forecasts out of date {iconn.timestamp}->{valid_time} > {forecast_period_sec/60} minutes')
+            else:
+                raise TypeError(f"forecast should be a Prediction_Connection, got {type(iconn).__name__}")
         pgf=pgf/ps*1e2
         pgf[rmask] = 0
-        
         fig.suptitle(tnow.astype(datetime.datetime).strftime('%Y/%m/%d %H:%M:%S')+'\n'
             +valid_time.astype(datetime.datetime).strftime('%Y/%m/%d %H:%M:%S')+f' (+{int(dt)} mins)',y=0.97)
         cs = axs.contour(Cx, Cy, pgf, levels=[30],colors='red')

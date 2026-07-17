@@ -22,8 +22,8 @@ def get_nf_forecast_pkl_name(l2_file, path_config):
     return os.path.join(savedir, fn)
 
 def get_nf_forecast_npz_name(l2_file, path_config):
-    savedir = os.path.join(path_config.nf_forecast_dir, 'forecast-'+l2_file)
-    os.makedirs(savedir,exist_ok=True)
+    savedir = os.path.join(path_config.nf_forecast_dir)
+    # os.makedirs(savedir,exist_ok=True)
     fn = f'NFGDA-forecast-{l2_file}.npz'
     return os.path.join(savedir, fn)
 
