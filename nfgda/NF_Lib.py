@@ -314,7 +314,8 @@ def nfgda_unit_step(l2_file_0,l2_file_1,process_tag=''):
     # scipy.io.savemat(matout, data_dict)
     np.savez(nf_path.get_nf_detection_name(ifn,path_config), **data_dict)
     if use_gdal:
-        path_config.gdal_writer.log_geo_tif(nf_path.get_nf_detection_name(ifn,path_config,ext='tif'),inputNF)
+        output_buf = np.concatenate((inputNF, data_dict["nfout"][:, :, np.newaxis]), axis=2)
+        path_config.gdal_writer.log_geo_tif(nf_path.get_nf_detection_name(ifn,path_config,ext='tif'),output_buf)
     nfgda_fig(ifn)
 
 END_GATE = 400
@@ -489,6 +490,9 @@ class GFGroups:
         obj.next_gp = data["next_gp"]
         obj.datakind = data["datakind"]
         return obj
+
+    def write_geojson(self, filename):
+        nf_gdal.save_tracks_to_geojson(self.arc_anchors, ( radar_lat, radar_lon), filename)
 
 class DataGFG(GFGroups):
     def __init__(self, data, binary_mask, kind = GFG_NONE):
@@ -1082,6 +1086,8 @@ def nfgda_stochastic_summary(forecasts,l2_file_0,force=False):
                 else:
                     tprint(sf_tag+
                     f'forecasts out of date {iconn.timestamp}->{valid_time} > {forecast_period_sec/60} minutes')
+            elif iconn == ():
+                pass
             else:
                 raise TypeError(f"forecast should be a Prediction_Connection, got {type(iconn).__name__}")
         pgf=pgf/ps*1e2

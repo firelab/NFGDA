@@ -1,5 +1,7 @@
 import numpy as np
 from osgeo import gdal, osr
+import json
+from pyproj import Transformer
 
 class Gdal_Writer:
     def __init__(self, radar_lat, radar_lon, pixel_size_m, nx, ny):
@@ -61,3 +63,41 @@ class Gdal_Writer:
             creationOptions=["COMPRESS=LZW", "TILED=YES"]
         )
         utm_ds = None
+
+
+def save_tracks_to_geojson(pos, center_latlon, filename):
+    """
+    pos: numpy array of shape (n, 2, points) where 2 is (x_km, y_km)
+    center_latlon: tuple (lat, lon) of the radar center
+    filename: output path
+    """
+    lat_c, lon_c = center_latlon
+    
+    # Create a transformer: converts (x, y) in meters to (lon, lat)
+    # The projection string '+proj=aeqd' is Azimuthal Equidistant
+    proj_str = f"+proj=aeqd +lat_0={lat_c} +lon_0={lon_c} +x_0=0 +y_0=0 +datum=WGS84 +units=km"
+    transformer = Transformer.from_crs(proj_str, "EPSG:4326", always_xy=True)
+
+    features = []
+    
+    # Iterate through each track (n)
+    for n in range(pos.shape[0]):
+        # Convert all points in the track at once for speed
+        # pos[n, :, 0] is x, pos[n, :, 1] is y
+        lons, lats = transformer.transform(pos[n, 0, :], pos[n, 1, :])
+        
+        # Zip them back into [lon, lat] pairs
+        coords = np.column_stack((lons, lats)).tolist()
+        
+        features.append({
+            "type": "Feature",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": coords
+            }
+        })
+
+    # Save to GeoJSON
+    geojson = {"type": "FeatureCollection", "features": features}
+    with open(filename, 'w') as f:
+        json.dump(geojson, f)

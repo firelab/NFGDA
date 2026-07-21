@@ -6,14 +6,34 @@ from scipy.interpolate import LinearNDInterpolator
 from importlib.resources import files
 from . import math_kit as mk
 from . import colorlevel as cl
+import csv
+import argparse
+import sys
+
 VM=cl.VarMap()
 varname_table=VM.varname_table
 varunit_table=VM.varunit_table
 
+parser = argparse.ArgumentParser(description="Run NFGDA processing pipeline.")
+
+# Define the --config argument (with --conf as an optional shorthand)
+parser.add_argument(
+    "--config", 
+    "--conf", 
+    default="NFGDA.ini", 
+    help="Path to the configuration INI file (default: NFGDA.ini)"
+)
+
+args = parser.parse_args()
+if any(arg.startswith("--config") or arg.startswith("--conf") for arg in sys.argv[1:]):
+    print(f"using ini --conf: {args.config}")
+else:
+    print(f"use default ini: {args.config}")
+config_file = args.config
+
 config = configparser.ConfigParser()
-config.read("NFGDA.ini")
+config.read(config_file)
 radar_id = config["Settings"]["radar_id"]
-radar_lat, radar_lon = list(map(float,config.get("labels", "loc").split(",")))
 export_preds_dir = config["Settings"]["export_preds_dir"]
 evalbox_on = config.getboolean('Settings', 'evalbox_on')
 export_forecast_dir = config["Settings"]["export_forecast_dir"]
@@ -86,6 +106,40 @@ datasy = np.array([*np.arange(-7,0,2),0,*np.arange(1,8,2),*np.arange(-7,0,2),0,*
 datasx = np.array([-4*np.ones((9)),4*np.ones((9))]).reshape(1,-1)
 datas = np.swapaxes(np.array([datasy,datasx]),0,2)
 ###### FTC Beta Z, dZ displacements ######
+
+
+def get_radar_lat_lon(radar_id, csv_path=None):
+    """
+    Looks up the latitude and longitude for a given radar station ID from the CSV file
+    using only Python's built-in csv module (no pandas required).
+    
+    Parameters:
+    - radar_id (str): The station ID (e.g., 'KTLX', 'TLX', 'ABR'). Case-insensitive.
+    - csv_path (str): Path to the nexrad_site_lon_lat.csv file.
+    
+    Returns:
+    - tuple: (latitude, longitude) as floats.
+    """
+    if csv_path is None:
+        lib_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        # Construct the path to the CSV inside the lib folder
+        csv_path = os.path.join(lib_dir, "nexrad_site_lon_lat.csv")
+
+    radar_id = radar_id.strip().upper()
+    
+    with open(csv_path, mode='r', encoding='utf-8') as infile:
+        reader = csv.DictReader(infile)
+        for row in reader:
+            site = row.get('SITE')
+            if site and site.strip().upper() == radar_id[-3:]:
+                lat = float(row['LATITUDE_N'])
+                lon = float(row['LONGITUDE_W'])
+                return lat, lon
+                
+    raise ValueError(f"Radar ID '{radar_id}' not found in {csv_path}")
+
+radar_lat, radar_lon = get_radar_lat_lon(radar_id)
 
 class path_struct():
     def __init__(self):
