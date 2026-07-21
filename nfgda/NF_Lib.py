@@ -1021,31 +1021,7 @@ def nfgda_stochastic_summary(forecasts,l2_file_0,force=False):
     tvec = st - second_offset*np.timedelta64(1, 's') \
         +np.arange(forecast_step_sec,forecast_period_sec+1,forecast_step_sec)*np.timedelta64(1, 's')
     tnow = st +( -second_offset + forecast_step_sec )*np.timedelta64(1, 's')
-    # forecast_end = tstart
-    # for tdx,buf in enumerate(forecasts):
-    #     if len(buf)==2:
-    #         if buf[0][0]>tnow and not(force):
-    #             tprint(sf_tag+
-    #                 f'{tnow} is out of date. New data {buf[0][0]} available.')
-    #             return
-    #         if buf[0][-1]>tnow and buf[0][0]<tnow:
-    #             live_tdx[tdx]=True
-    #         forecast_size = buf[0].size
-    #         # tprint(sf_tag+f'forecast_size = {forecast_size}')
-    # if np.sum(live_tdx)==0:
-    #     tprint(sf_tag+
-    #         'No forecast for summary.')
-    #     return
-    # else:
-    #     summary_tdx = np.where(live_tdx)[0]
-    #     tprint(sf_tag+
-    #         f'Summary forecasts[{len(summary_tdx)}]:',
-    #         *[forecasts[tdx][0][0] for tdx in summary_tdx])
-    # ips=[]
-    # for tdx in summary_tdx:
-    #     ips.append(np.where(forecasts[tdx][0]==tnow)[0][0])
-    # ips = np.array(ips,dtype=int)
-    # tline = forecasts[summary_tdx[np.argmin(ips)]][0][np.min(ips):]
+
     fig, axs = plt.subplots(1, 1, figsize=(3.3/0.7, 3/0.7),dpi=150)
     pdata = np.ma.masked_where(rmask,data['inputNF'][:,:,1])
     pcz=axs.pcolormesh(Cx,Cy,pdata,cmap=cl.zmap,norm=cl.znorm)

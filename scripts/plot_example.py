@@ -9,8 +9,8 @@ import os
 from datetime import datetime
 
 # 1. Open the raster with GDAL
-Detection_path = "plot_res/nf_predKABX20200707_013332_V06.tif"
-forecast_path = "plot_res/NFGDA-forecast-KABX20200707_014700.tif"
+Detection_path = "../plot_res/nf_predKABX20200707_013332_V06.tif"
+forecast_path = "../plot_res/NFGDA-forecast-KABX20200707_014700.tif"
 ds_det = gdal.Open(Detection_path)
 gt = ds_det.GetGeoTransform()
 
